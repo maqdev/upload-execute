@@ -1,0 +1,7 @@
+.Skype/
+.idea/
+.vagrant/
+project/project/
+target/
+.DS_Store
+/upload/
