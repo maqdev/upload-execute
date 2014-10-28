@@ -6,7 +6,7 @@ import java.util.UUID
 import akka.actor.Actor
 import spray.http.MediaTypes._
 import spray.http.{BodyPart, _}
-import spray.routing._
+import spray.routing.HttpService
 
 import scala.util.matching.Regex
 
