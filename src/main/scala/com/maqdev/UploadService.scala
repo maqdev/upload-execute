@@ -4,6 +4,7 @@ import java.io.{File, OutputStream, InputStream, ByteArrayInputStream}
 import java.util.UUID
 
 import akka.actor.Actor
+import akka.event.Logging
 import spray.http.MediaTypes._
 import spray.http.{BodyPart, _}
 import spray.routing.HttpService
@@ -14,6 +15,7 @@ class UploadService extends Actor with HttpService {
   import com.typesafe.config._
   val conf = ConfigFactory.load()
   val uploadDir = conf.getString("upload-dir")
+  val log = Logging(context.system, this)
 
   import collection.JavaConversions._
   val templateMap = conf.getConfigList("templates").map { x =>
@@ -37,38 +39,36 @@ class UploadService extends Actor with HttpService {
     path("upload") {
       post {
         entity(as[MultipartFormData]) { formData =>
-          detach() {
-            val r = formData.fields.headOption.map {
-              case (BodyPart(entity, headers)) =>
-                val content = entity.data.toByteArray
-                val contentType = headers.find(h => h.is("content-type"))
-                val fileName = headers.find(h => h.is("content-disposition")).get.value.split("filename=").last
+          val r = formData.fields.headOption.map {
+            case (BodyPart(entity, headers)) =>
+              val content = entity.data.toByteArray
+              val contentType = headers.find(h => h.is("content-type"))
+              val fileName = headers.find(h => h.is("content-disposition")).get.value.split("filename=").last
 
-                templateMap.find(_._1.findFirstIn(fileName).isDefined) map { cmd ⇒
+              templateMap.find(_._1.findFirstIn(fileName).isDefined) map { cmd ⇒
 
-                  val uuid = UUID.randomUUID()
-                  val dir = uploadDir + "/" + uuid.toString
-                  new File(dir).mkdirs()
-                  val path = dir + "/" + fileName
-                  saveAttachment(path, content)
+                val uuid = UUID.randomUUID()
+                val dir = uploadDir + "/" + uuid.toString
+                new File(dir).mkdirs()
+                val path = dir + "/" + fileName
+                saveAttachment(path, content)
 
-                  import sys.process._
-                  val cmdFull = cmd._2.replace("$FILE_NAME", path)
+                import sys.process._
+                val cmdFull = cmd._2.replace("$FILE_NAME", path)
 
-                  val result = cmdFull.!!
-
-                  HttpResponse(StatusCodes.OK, HttpEntity(ContentType(`text/plain`),
-                    s"OK: $path\nexec $cmdFull\n$result")
-                  )
-                } getOrElse {
-                  HttpResponse(StatusCodes.Forbidden, HttpEntity(ContentType(`text/plain`), "Forbidden\n"))
-                }
-              case _ =>
-                HttpResponse(StatusCodes.BadRequest, HttpEntity(ContentType(`text/plain`), "Bad request\n"))
-            }
-            complete {
-              r
-            }
+                val result = cmdFull.!!
+                log.info(s"$cmdFull Finished with: $result")
+                HttpResponse(StatusCodes.OK, HttpEntity(ContentType(`text/plain`),
+                  s"OK: $path\nexec $cmdFull\n$result")
+                )
+              } getOrElse {
+                HttpResponse(StatusCodes.Forbidden, HttpEntity(ContentType(`text/plain`), "Forbidden\n"))
+              }
+            case _ =>
+              HttpResponse(StatusCodes.BadRequest, HttpEntity(ContentType(`text/plain`), "Bad request\n"))
+          }
+          complete {
+            r
           }
         }
       }
