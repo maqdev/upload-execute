@@ -9,6 +9,7 @@ import spray.http.MediaTypes._
 import spray.http.{BodyPart, _}
 import spray.routing.HttpService
 
+import scala.util.control.NonFatal
 import scala.util.matching.Regex
 
 class UploadService extends Actor with HttpService {
@@ -53,14 +54,34 @@ class UploadService extends Actor with HttpService {
                 val path = dir + "/" + fileName
                 saveAttachment(path, content)
 
-                import sys.process._
-                val cmdFull = cmd._2.replace("$FILE_NAME", path)
 
-                val result = cmdFull.!!
-                log.info(s"$cmdFull Finished with: $result")
-                HttpResponse(StatusCodes.OK, HttpEntity(ContentType(`text/plain`),
-                  s"OK: $path\nexec $cmdFull\n$result")
+                val cmdFull = cmd._2.replace("$FILE_NAME", path)
+                val resultLog = new StringBuilder
+                val resultErrorLog = new StringBuilder
+                import sys.process._
+                val logger = ProcessLogger(
+                  (o: String) => resultLog.append(o),
+                  (e: String) => resultErrorLog.append(e)
                 )
+
+                val result =
+                  try {
+                    sys.process.Process(cmdFull).!(logger)
+                    true
+                  }
+                  catch {
+                    case NonFatal(e) ⇒ false
+                  }
+
+                val id = UUID.randomUUID().toString
+                if (result) {
+                  log.info(s"$id $cmdFull Finished with: $resultLog\n$resultErrorLog")
+                  HttpResponse(StatusCodes.OK, HttpEntity(ContentType(`text/plain`), s"OK: $id"))
+                }
+                else {
+                  log.error(s"$id $cmdFull Finished with: $resultLog\n$resultErrorLog")
+                  HttpResponse(StatusCodes.InternalServerError, HttpEntity(ContentType(`text/plain`), s"Failed: $id"))
+                }
               } getOrElse {
                 HttpResponse(StatusCodes.Forbidden, HttpEntity(ContentType(`text/plain`), "Forbidden\n"))
               }
