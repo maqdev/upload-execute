@@ -60,8 +60,14 @@ class UploadService extends Actor with HttpService {
                 val resultErrorLog = new StringBuilder
                 import sys.process._
                 val logger = ProcessLogger(
-                  (o: String) => resultLog.append(o),
-                  (e: String) => resultErrorLog.append(e)
+                  (o: String) => {
+                    resultLog.append(o)
+                    resultLog.append("\n")
+                  },
+                  (e: String) => {
+                    resultErrorLog.append(e)
+                    resultErrorLog.append("\n")
+                  }
                 )
 
                 val result =
@@ -73,14 +79,13 @@ class UploadService extends Actor with HttpService {
                     case NonFatal(e) ⇒ false
                   }
 
-                val id = UUID.randomUUID().toString
                 if (result) {
-                  log.info(s"$id $cmdFull Finished with: $resultLog\n$resultErrorLog")
-                  HttpResponse(StatusCodes.OK, HttpEntity(ContentType(`text/plain`), s"OK: $id"))
+                  log.info(s"$cmdFull Finished with: $resultLog\n$resultErrorLog")
+                  HttpResponse(StatusCodes.OK, HttpEntity(ContentType(`text/plain`), s"OK: $uuid"))
                 }
                 else {
-                  log.error(s"$id $cmdFull Finished with: $resultLog\n$resultErrorLog")
-                  HttpResponse(StatusCodes.InternalServerError, HttpEntity(ContentType(`text/plain`), s"Failed: $id"))
+                  log.error(s"$cmdFull Finished with: $resultLog\n$resultErrorLog")
+                  HttpResponse(StatusCodes.InternalServerError, HttpEntity(ContentType(`text/plain`), s"Failed: $uuid"))
                 }
               } getOrElse {
                 HttpResponse(StatusCodes.Forbidden, HttpEntity(ContentType(`text/plain`), "Forbidden\n"))
